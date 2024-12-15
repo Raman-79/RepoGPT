@@ -43,3 +43,31 @@ export interface Message {
     sender: 'user' | 'bot';
     timestamp: Date;
 }
+
+export type CodeReview = {
+    code_review: Array<{
+      file_name: string;
+      current_functionality: string;
+      code_quality: {
+        strengths: string[];
+        weaknesses: string[];
+      };
+      complexity_score: number; // Range: 1-10
+    }>;
+    possible_changes: Array<{
+      file_name: string;
+      recommended_refactoring: string[];
+      potential_performance_improvements: string[];
+      code_structure_suggestions: string[];
+    }>;
+    enhancements: Array<{
+      category: "UI" | "UX" | "Functionality" | "Architecture";
+      suggestions: string[];
+      potential_impact: "Low" | "Medium" | "High";
+    }>;
+    overall_project_insights: {
+      main_observations: string[];
+      key_recommendations: string[];
+    };
+  };
+  

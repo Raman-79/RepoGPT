@@ -1,12 +1,34 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { system_prompt } from "./prompts";
-
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API!);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-export async function init(user_files:string){
-  const prompt = system_prompt;
-  const result = await model.generateContent(prompt+user_files);
-  console.log(result.response.text());
-}
+import { agent_prompt, system_prompt } from "./prompts";
+export async function run(model: string, input: any) {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/bc24d447d907f1eeea1c5f64af42f380/ai/run/${model}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.WORKER_AI}` },
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
+    const result = await response.json();
+    return result;
+  }
+  
+  run("@cf/meta/llama-3-8b-instruct", {
+    messages: [
+      {
+        role: "system",
+        content: system_prompt,
+      },
+      {
+        role:"user",
+        content:""
+      },
+      {
+        role:"assistant",
+        content:agent_prompt
+      }
+    ],
+  }).then((response) => {
+    //console.log(JSON.stringify(response));
+    return response.data;
+  });
+  

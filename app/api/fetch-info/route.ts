@@ -1,6 +1,6 @@
 import { NEXT_AUTH } from "@/app/utils/auth";
 import { getServerSession } from "next-auth";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { GithubResponse, FilesAndContent} from "@/app/interfaces";
 
 async function fetchFileContent(file: GithubResponse, token: string): Promise<FilesAndContent | null> {
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
             }
         }
         
-        return Response.json({ files });
+        return NextResponse.json({ data:files });
     } catch (error) {
         console.error("Unexpected error:", error);
         return Response.json({ 

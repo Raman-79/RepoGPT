@@ -8,7 +8,6 @@ interface ChatBoxProps {
 }
 
 export const ChatBox: React.FC<ChatBoxProps> = ({ initialMessage }) => {
-    console.log(initialMessage);
     const [prompt, setPrompt] = useState('');
     const [messages, setMessages] = useState<Message[]>(
         initialMessage ? [initialMessage] : []
@@ -22,9 +21,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ initialMessage }) => {
 
     useEffect(() => {
         scrollToBottom();
-      }, [messages]);
+    }, [messages]);
 
-    const handleSend = () => {
+    const handleSend = async () => {
         if (prompt.trim() === '') return;
 
         const userMessage: Message = {
@@ -34,25 +33,65 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ initialMessage }) => {
             timestamp: new Date(),
         };
 
+        // Clear input and add user message
         setPrompt('');
         setMessages((prevMessages) => [...prevMessages, userMessage]);
 
-        // Simulate bot response (replace with actual API call)
-        setTimeout(() => {
+        try {
+            // Actual API call for bot response
+            const response = await fetch('/api/chat/continue', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    messages: [...messages, userMessage],
+                    prompt: prompt 
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to get response');
+            }
+
+            const data = await response.json();
+
             const botMessage: Message = {
                 id: Date.now(),
-                text: `You said: ${prompt}`,
+                text: data.response,
                 sender: 'bot',
                 timestamp: new Date(),
             };
+
             setMessages((prevMessages) => [...prevMessages, botMessage]);
-        }, 1000);
+        } catch (error) {
+            console.error('Error sending message:', error);
+            
+            const errorMessage: Message = {
+                id: Date.now(),
+                text: 'Sorry, something went wrong. Please try again.',
+                sender: 'bot',
+                timestamp: new Date(),
+            };
+
+            setMessages((prevMessages) => [...prevMessages, errorMessage]);
+        }
     };
 
     const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             handleSend();
         }
+    };
+
+    // Function to render message text with formatting
+    const renderMessageText = (text: string) => {
+        // Replace ** with bold tags
+        let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // Replace \n with <br> tags
+        formattedText = formattedText.replace(/\n/g, '<br>');
+        return formattedText;
     };
 
     return (
@@ -73,7 +112,11 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ initialMessage }) => {
                                     : 'bg-blue-500 text-white'
                             } p-4 rounded-xl`}
                         >
-                            {msg.text}
+                            <div 
+                                dangerouslySetInnerHTML={{ 
+                                    __html: renderMessageText(msg.text) 
+                                }} 
+                            />
                         </div>
                     </div>
                 ))}

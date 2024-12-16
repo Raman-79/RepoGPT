@@ -25,7 +25,7 @@ export const NEXT_AUTH: NextAuthOptions = {
     callbacks:{
       async jwt({token,account}) {
         if(account){
-          console.log(account)
+          //console.log(account)
           token.accessToken = account.access_token;
         }
         return token;

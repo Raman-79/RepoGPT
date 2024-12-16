@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     console.log("Initial response:", initialResponse);
 
-    return NextResponse.json({ response: initialResponse });
+    return NextResponse.json({ response: initialResponse.result.response });
   } catch (error) {
     console.error("Error in POST /api/chat/init:", error);
     return NextResponse.json(

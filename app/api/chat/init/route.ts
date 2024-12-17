@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 const key = process.env.WORKERS_AI!;
-async function run(model: string, input: any) {
+export async function run(model: string, input: any) {
   try {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${process.env.ACCOUNT_ID}/ai/run/${model}`,

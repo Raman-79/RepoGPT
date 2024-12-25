@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ChatBox } from '../components/Chatbox';
+import { ChatBox } from '@/components/ui/Chatbox';
 import { Message } from '../interfaces';
 import { useSearchParams } from 'next/navigation';
 import DOMPurify from 'dompurify';
@@ -14,13 +14,9 @@ export default function ChatPage() {
 
     // Function to render text with bold formatting, returning HTML string
     const renderFormattedText = (text: string): string => {
-        // Replace ** with <strong> tags
         let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        
-        // Replace \n with <br> tags
         formattedText = formattedText.replace(/\n/g, '<br>');
         
-        // Sanitize the HTML to prevent XSS
         return DOMPurify.sanitize(formattedText);
     };
 
@@ -44,7 +40,7 @@ export default function ChatPage() {
             // Prepare the code review message
             const initialMessage: Message = {
                 id: 1,
-                text: result,
+                text: renderFormattedText(result),
                 sender: 'bot',
                 timestamp: new Date(),
             };

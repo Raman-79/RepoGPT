@@ -4,7 +4,8 @@ export interface Repository {
     html_url: string;
     owner:{
       login:string
-    }
+    },
+    description: string;
   }
 
 export interface TypewriterProps {

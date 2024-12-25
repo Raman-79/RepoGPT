@@ -1,62 +1,37 @@
-import { NextRequest, NextResponse } from "next/server";
-import { agent_prompt, system_prompt } from "../prompts";
-import dotenv from "dotenv";
+import { NextResponse } from 'next/server'
+import { agent_prompt, system_prompt } from '../../prompts/review-prompt'
 
-dotenv.config();
-const key = process.env.WORKERS_AI!;
-export async function run(model: string, input: any) {
+export async function POST(request: Request) {
+  const { message} = await request.json()
+
+  const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID
+  const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN
+
   try {
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.ACCOUNT_ID}/ai/run/${model}`,
-      {
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    );
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-2-7b-chat-int8`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [
+         { role: "system", content: system_prompt },
+         { role: "user", content: JSON.stringify(message) },
+         { role: "assistant", content: agent_prompt },
+        ],
+      }),
+    })
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("API error:", errorData);
-      throw new Error(`API returned status ${response.status}`);
+      throw new Error('Failed to get response from Cloudflare Workers AI')
     }
 
-    const result = await response.json();
-    return result;
+    const data = await response.json()
+    return NextResponse.json({ message: data.result.response })
   } catch (error) {
-    console.error("Error in run function:", error);
-    throw error;
+    console.error('Error in chat API:', error)
+    return NextResponse.json({ error: 'Failed to process chat message' }, { status: 500 })
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { data } = body;
-
-    if (!data) {
-      return NextResponse.json({ error: "No data provided" }, { status: 400 });
-    }
-
-    const initialResponse = await run("@cf/meta/llama-3-8b-instruct", {
-      messages: [
-        { role: "system", content: system_prompt },
-        { role: "user", content: JSON.stringify(data) },
-        { role: "assistant", content: agent_prompt },
-      ],
-    });
-
-    console.log("Initial response:", initialResponse);
-
-    return NextResponse.json({ response: initialResponse.result.response });
-  } catch (error) {
-    console.error("Error in POST /api/chat/init:", error);
-    return NextResponse.json(
-      { error: "Failed to process request" },
-      { status: 500 }
-    );
-  }
-}

@@ -3,7 +3,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Typewriter from "@/components/ui/Typewriter";
 import { Repository } from "./interfaces";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,11 +12,11 @@ export default function Home() {
   const { data: session } = useSession();
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+    const router = useRouter();
 
-  const handleRedirect = (owner: string, repo: string) => {
-    router.push(`/chat?username=${owner}&repo=${repo}`);
-  };
+    // const handleRedirect = (owner: string, repo: string) => {
+    //   router.push(`/chat?username=${owner}&repo=${repo}`);
+    // };
 
   const fetchRepos = async () => {
     //@ts-expect-error abc
@@ -78,11 +78,11 @@ export default function Home() {
       ) : repos.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {repos.map((repo) => (
-            <Card key={repo.id} onClick={() => handleRedirect(repo.owner.login, repo.name)} className="cursor-pointer hover:shadow-lg transition-shadow">
+            <Card key={repo.id} onClick={()=> redirect('/chat')} className="cursor-pointer hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="text-primary">{repo.name}</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent >
                 <p className="text-sm text-muted-foreground ">
                   {repo.description ?? "No description"}
                 </p>

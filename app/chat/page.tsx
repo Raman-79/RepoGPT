@@ -5,6 +5,7 @@ import { ChatBox } from '@/components/ui/Chatbox';
 import { Message } from '../interfaces';
 import { useSearchParams } from 'next/navigation';
 import DOMPurify from 'dompurify';
+import { Spinner } from '@/components/ui/spinner';
 export default function ChatPage() {
     const searchParams = useSearchParams();
     const owner = searchParams.get('username');
@@ -40,7 +41,7 @@ export default function ChatPage() {
             // Prepare the code review message
             const initialMessage: Message = {
                 id: 1,
-                text: renderFormattedText(result),
+                text: 'Hello! I am your code review assistant. I will help you review your code changes.',
                 sender: 'bot',
                 timestamp: new Date(),
             };
@@ -59,7 +60,7 @@ export default function ChatPage() {
         }
     }, [codeReview]);
     if (loading) {
-        return <div>Loading...</div>;
+        return <div><Spinner size="lg" /></div>;
     }
 
     return <ChatBox initialMessage={codeReview} />;

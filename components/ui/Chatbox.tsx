@@ -124,7 +124,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ initialMessage }) => {
             </div>
 
             {/* Input Area */}
-            <div className="sticky bottom-0 bg-white shadow-lg">
+            <div className="sticky bottom-0 bg-white shadow-lg" style={{
+                boxShadow: '0 0 10px 4px rgba(0, 255, 255, 0.5), 0 0 20px 8px rgba(0, 128, 255, 0.5), 0 0 60px 12px rgba(0, 192, 192, 0.5)',
+            }}>
                 <div className="max-w-4xl mx-auto px-4 md:px-24 py-6">
                     <div className="flex items-center bg-gray-100 rounded-xl p-2">
                         <input

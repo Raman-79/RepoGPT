@@ -1,47 +1,79 @@
+import { NextResponse } from "next/server";
+import { excludedFiles, excludedFolders } from "@/lib/consts";
 
-import {  NextResponse } from "next/server";
-
-interface GithubTree{
-    sha:string,
-    url:string,
-    tree:GithubResponse[]
+interface GithubTree {
+    sha: string;
+    url: string;
+    tree: GithubTreeItem[];
 }
-interface GithubResponse{ 
-        path:string,
-        type:string,
-        size:number,
-        url:string
-}
-export async function GET(){
 
-    const file_names: string[] = [];
-    const folders : string[]= [];
-    //Step 1 : Get the name of all the files in a repo main branch 
-    const res = await fetch('https://api.github.com/repos/Raman-79/newtube/git/trees/main?recursive=1')
-    const data:GithubTree = await res.json();
-    for(const file of data.tree){
-        if(file.type == 'blob'){
-            file_names.push(file.path);
+interface GithubTreeItem { 
+    path: string;
+    mode: string;
+    type: 'blob' | 'tree';
+    size: number;
+    sha: string;
+    url: string;
+}
+interface FileInfo {
+    name: string;
+    url: string;
+}
+
+
+export async function GET() {
+    try {
+        const file_names: FileInfo[] = [];
+        
+        const res = await fetch('https://api.github.com/repos/Raman-79/newtube/git/trees/main?recursive=1', {
+            headers: {
+                'Accept': 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28'
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`GitHub API responded with status ${res.status}`);
         }
-        else folders.push(file.path);
-    }
 
-   
-    //Step 2:  traverse through the response and store all the contents in hash in a nosql db
-    const relevant_folders = await fetch('/api/chat/trial',{
-        body:JSON.stringify({
-            action:'Review',
-            message:'What are the relevant files and folders you require to review and make necessary changes. Note: Do not include files and folders like packages etc etc'
+        const data: GithubTree = await res.json();
+
+        for (const file of data.tree) {
+            if (file.type === 'blob' && file.path) {
+                file_names.push({
+                    name: file.path,
+                    url: file.url
+                });
+            }
+        }
+
+        const filteredFiles = file_names.filter((file) => 
+            !excludedFiles.some((excludedFile) => file.name.includes(excludedFile)) && !excludedFolders.some((excludedFolder)=> file.name.includes(excludedFolder))
+        );
+
+        // Generate embeddings for the filtered files
+        await Promise.all(filteredFiles.map(async (file) => {
+            await fetch('/api/embeddings', {
+                method:'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fileName: file.name,url: file.url})
+            })
+        }))
+        .then((res)=>{
+            console.log(res);
         })
-    });
+        .catch((err)=>{
+            console.error(err);
+        });
 
-    const relevant_folders_data = await relevant_folders.json(); // this will be an array or we can use RAG for fetching relevant file contents
-    
-
-return NextResponse.json({data});
-
-
-//Step 3: 
+        return NextResponse.json({ success: true, data: filteredFiles,message:'Embeddings generated for the files as context and fully too.' });
+    } catch (error) {
+        console.error('Error fetching repository data:', error);
+        return NextResponse.json(
+            { success: false, error: 'Failed to fetch repository data' },
+            { status: 500 }
+        );
+    }
 }
-
-

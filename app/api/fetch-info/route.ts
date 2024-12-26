@@ -1,5 +1,5 @@
 import { FilesAndContent, GithubResponse } from "@/app/interfaces";
-import { NEXT_AUTH } from "@/app/utils/auth";
+import { NEXT_AUTH } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { Stack } from "@/app/interfaces/stack";
@@ -102,24 +102,6 @@ async function recursiveFileCall(
         return [];
     }
 }
-//Given the name of all files ['index.htmx','Readme.md','server/hello.go','server/main.go'] 
-//   | (Goes to an LLM where it selects the file names and gives a response)
-//   - ex : required_files = ['server/hello.go','server/main.go'];
-//  Fetch the contents of those files and store it in redis cache
-// Send the contents required_files_content[]{file_name: 'server/hello.go',content: 'fdhfsjfdhsfsdhf'}
-// recieve the response
-
-async function fetchFileNmes(file:GithubResponse,token:string,stk:Stack<string>):Promise<Array<string> | null> 
-{
-
-    return [''];    
-}
-
-async function recursiveFileNameCall( path: GithubResponse, owner: string, repo: string, token: string, stk: Stack<string>):Promise<Array<string> | null>
-{
-
-    return [''];
-}
 
 
 export async function GET(req: NextRequest) {
@@ -132,7 +114,7 @@ export async function GET(req: NextRequest) {
             error: "Authentication required" 
         }, { status: 401 });
     }
-    //@ts-expect-error
+    //@ts-expect-error abc
     const token = session.accessToken;
 
     try {

@@ -1,10 +1,29 @@
-
-
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model Embedding {
+  id             String    @id @default(cuid()) // Unique identifier for the file
+  fileName       String    // Name of the file, e.g., "auth.js"
+  rawContent     String    // Full content of the file
+  type          EmbeddingType?  // Type of the file, e.g., "javascript"
+  embedding Unsupported("vector(768)")? 
+  url           String    // URL to the file
+  summary        String    // High-level summary of the file
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+
+
+enum EmbeddingType {
+  SUMMARY
+  FULL
 }

@@ -30,8 +30,9 @@ export const NEXT_AUTH: NextAuthOptions = {
         }
         return token;
       },
-      async session({session,token}:any){
+      async session({session,token}){
         if(token){
+          //@ts-expect-error abc
           session.accessToken = token.accessToken
         }
         return session;

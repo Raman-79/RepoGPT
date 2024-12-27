@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { excludedFiles, excludedFolders } from "@/lib/consts";
 
 interface GithubTree {
@@ -21,11 +21,13 @@ interface FileInfo {
 }
 
 
-export async function GET() {
+export async function POST(req:NextRequest) {
     try {
+        const body = await req.json();
+        const{owner,repo} = body;
         const file_names: FileInfo[] = [];
         
-        const res = await fetch('https://api.github.com/repos/Raman-79/newtube/git/trees/main?recursive=1', {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`, {
             headers: {
                 'Accept': 'application/vnd.github+json',
                 'X-GitHub-Api-Version': '2022-11-28'

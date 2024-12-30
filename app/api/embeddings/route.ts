@@ -1,13 +1,12 @@
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from '@/lib/db';
 import dotenv from 'dotenv';
-import { system_prompt } from "../prompts/review-prompt";
-
 dotenv.config();
 
-const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID!;
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN!;
+const CLOUDFLARE_ACCOUNT_ID = process.env.ACCOUNT_ID!;
+const CLOUDFLARE_API_TOKEN = process.env.WORKERS_AI!;
 
 interface ContentResponse {
     sha: string;
@@ -21,59 +20,55 @@ interface EmbeddingData {
     summary: string;
     type: "SUMMARY" | "FULL";
     url: string;
-    embeddings: number[];
+    embedding: number[];
 }
 
 // Database operations
 async function storeEmbeddingsWithTransaction(summaryData: EmbeddingData, codeData: EmbeddingData) {
-    return await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx) => {
         // Store summary embeddings
-        const summaryRecord = await tx.embedding.create({
+        const summaryInsertResult = await tx.embedding.create({
             data: {
                 fileName: summaryData.fileName,
                 rawContent: summaryData.rawContent,
                 summary: summaryData.summary,
                 type: summaryData.type,
                 url: summaryData.url,
-                updatedAt: new Date(),
-            },
+
+            }
         });
 
         await tx.$executeRaw`
-            UPDATE embeddings 
-            SET 
-                embeddings = ${summaryData.embeddings}::vector,
-                updatedAt = CURRENT_TIMESTAMP
-            WHERE id = ${summaryRecord.id}
+            UPDATE "embedding"
+            SET embedding = ${summaryData.embedding}::vector
+            WHERE id = ${summaryInsertResult.id};
         `;
 
-        // Store code embeddings
-        const codeRecord = await tx.embedding.create({
+        const codeInsertResult = await tx.embedding.create({
             data: {
                 fileName: codeData.fileName,
                 rawContent: codeData.rawContent,
                 summary: codeData.summary,
                 type: codeData.type,
                 url: codeData.url,
-                updatedAt: new Date(),
-            },
+            }
         });
 
         await tx.$executeRaw`
-            UPDATE embeddings 
-            SET 
-                embeddings = ${codeData.embeddings}::vector,
-                updatedAt = CURRENT_TIMESTAMP
-            WHERE id = ${codeRecord.id}
+            UPDATE "embedding"
+            SET embedding = ${codeData.embedding}::vector
+            WHERE id = ${codeInsertResult.id};
         `;
 
         return {
-            summaryId: summaryRecord.id,
-            codeId: codeRecord.id,
+            summaryId: summaryInsertResult.id,
+            codeId: codeInsertResult.id
         };
+    }, {
+        maxWait: 20000, // default: 2000
+        timeout: 30000, // default: 5000
     });
 }
-
 // Existing utility functions
 async function fetchContents(url: string): Promise<ContentResponse> {
     try {
@@ -102,13 +97,14 @@ async function getSummary(text: string): Promise<string> {
             },
             body: JSON.stringify({
                 messages: [
-                    { role: "system", content: system_prompt },
+                    { role: "system", content: 'You are an AI assistant that specializes in generating concise summaries. Analyze the provided text and create a clear, informative summary that captures the key points while maintaining context and relevance.' },
                     { role: "user", content: JSON.stringify(text) }
                 ],
             }),
         });
-        const res = await data.json();
-        return res.result;
+        const response = await data.json();
+       
+        return response.result.response.toString();
     }
     catch (error) {
         console.error("Error generating summary:", error);
@@ -116,7 +112,7 @@ async function getSummary(text: string): Promise<string> {
     }
 }
 
-async function getSummaryEmbeddings(text: string): Promise<number[]> {
+export async function getEmbeddings(text: string): Promise<number[]> {
     try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
         const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
@@ -129,17 +125,6 @@ async function getSummaryEmbeddings(text: string): Promise<number[]> {
     }
 }
 
-async function getCompleteCodeEmbeddings(code: string): Promise<number[]> {
-    try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-        const model = genAI.getGenerativeModel({ model: "code-embedding-004" });
-        const embeddings = await model.embedContent(code);
-        return embeddings.embedding.values;
-    } catch (error) {
-        console.error("Error generating code embeddings:", error);
-        throw error;
-    }
-}
 
 export async function POST(req: NextRequest) {
     try {
@@ -154,8 +139,9 @@ export async function POST(req: NextRequest) {
 
         // Generate summary and embeddings
         const summary = await getSummary(decodedText);
-        const summaryEmbeddings = await getSummaryEmbeddings(summary);
-        const codeEmbeddings = await getCompleteCodeEmbeddings(decodedText);
+        
+        const summaryEmbeddings = await getEmbeddings(summary);
+        const codeEmbeddings = await getEmbeddings(decodedText);
 
         // Prepare data for storage
         const summaryData: EmbeddingData = {
@@ -164,7 +150,7 @@ export async function POST(req: NextRequest) {
             summary,
             type: "SUMMARY",
             url,
-            embeddings: summaryEmbeddings,
+            embedding: summaryEmbeddings,
         };
 
         const codeData: EmbeddingData = {
@@ -173,7 +159,7 @@ export async function POST(req: NextRequest) {
             summary,
             type: "FULL",
             url,
-            embeddings: codeEmbeddings,
+            embedding: codeEmbeddings,
         };
 
         // Store both embeddings in a single transaction

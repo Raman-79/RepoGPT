@@ -1,10 +1,10 @@
 'use client';
-import React, { useState,   JSX, useEffect } from 'react';
+import React, { useState, JSX, useEffect } from 'react';
 import { Send, Github } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -19,17 +19,22 @@ interface ApiResponse {
 }
 
 const ChatInterface: React.FC = () => {
-  const { repo, owner } = useParams();
+  const searchParams = useSearchParams();
+  const repo = searchParams.get('repo');
+  const owner = searchParams.get('owner');
+  const branch  = searchParams.get('branch');
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>();
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
   const codeEmbedding = async (): Promise<ApiResponse | null> => {
     try {
-      const response = await fetch('/api/embedding/repo', {
+      const response = await fetch('/api/embeddings/repo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo, owner }), 
+        body: JSON.stringify({ repo, owner,branch }), 
       });
       if (!response.ok) throw new Error(`Error: ${response.statusText}`);
       return response.json();
@@ -39,25 +44,20 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-
-  useEffect(()=>{
+  useEffect(() => {
     const loadData = async () => {
-        try {
-          setIsLoading(true);
-          const data = await codeEmbedding();
-          if (data) {
-            console.log(data);
-          }
-        } catch (error) {
-          console.error(error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      
-      loadData();
+      try {
+        setIsLoading(true);
+        await codeEmbedding();
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
     loadData();
-  },[repo,owner]);
+  }, [repo, owner,branch]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -69,26 +69,53 @@ const ChatInterface: React.FC = () => {
       timestamp: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMessage]);
+    
+    // Add an empty assistant message that will be updated with the stream
+    const assistantMessage: Message = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, assistantMessage]);
+    
     setInput('');
-    setIsLoading(true);
+    setIsStreaming(true);
 
     try {
-      const response = await fetch('/api/fetch-info/trial', {
+      const response = await fetch('/api/chat/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: input }),
+        body: JSON.stringify({ user_prompt: input }),
       });
 
       if (!response.ok) throw new Error('Failed to fetch response');
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      const data: ApiResponse = await response.json();
+      if (!reader) throw new Error('No reader available');
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: data.message,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Handle the streaming response
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        // Decode the chunk and append it to the assistant's message
+        const chunk = decoder.decode(value);
+        
+        setMessages((prevMessages) => {
+          const newMessages = [...prevMessages];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage.role === 'assistant') {
+            lastMessage.content += chunk;
+          }
+          return newMessages;
+        });
+      }
+
     } catch (error) {
       console.error('Error:', error);
       const errorMessage: Message = {
@@ -98,7 +125,7 @@ const ChatInterface: React.FC = () => {
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -155,7 +182,7 @@ const ChatInterface: React.FC = () => {
                 </div>
               </div>
             ))}
-            {isLoading && (
+            {isStreaming && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 rounded-xl p-4">
                   <div className="flex space-x-2">
@@ -172,19 +199,19 @@ const ChatInterface: React.FC = () => {
         <CardContent className="border-t p-6 bg-white">
           <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
             <div className="flex space-x-3">
-            <input
-  type="text"
-  value={input}
-  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
-  placeholder="Ask about your repository..."
-  className="flex-grow p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-  disabled={isLoading}
-  aria-label="Repository question input"
-  aria-disabled={isLoading}
-/>
+              <input
+                type="text"
+                value={input}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
+                placeholder="Ask about your repository..."
+                className="flex-grow p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                disabled={isStreaming}
+                aria-label="Repository question input"
+                aria-disabled={isStreaming}
+              />
               <Button
                 type="submit"
-                disabled={isLoading || !input.trim()}
+                disabled={isStreaming || !input.trim()}
                 className="px-6 rounded-xl bg-blue-600 hover:bg-blue-700"
               >
                 <Send className="w-4 h-4" />

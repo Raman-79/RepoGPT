@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { excludedFiles, excludedFolders } from "@/lib/consts";
+import { getServerSession } from "next-auth";
+import { NEXT_AUTH } from "@/lib/auth";
 
 interface GithubTree {
     sha: string;
@@ -15,62 +17,90 @@ interface GithubTreeItem {
     sha: string;
     url: string;
 }
-interface FileInfo {
-    name: string;
-    url: string;
-}
 
-
-export async function POST(req:NextRequest) {
+export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const{owner,repo} = body;
-        const file_names: FileInfo[] = [];
-        
-        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`, {
-            headers: {
-                'Accept': 'application/vnd.github+json',
-                'X-GitHub-Api-Version': '2022-11-28'
+        const { owner, repo,branch } = await req.json();
+       
+        const session = await getServerSession(NEXT_AUTH);
+       
+        // @ts-expect-error abc
+        if (!session?.accessToken) {
+            return NextResponse.json(
+                { success: false, error: 'No access token found' },
+                { status: 401 }
+            );
+        }
+
+
+        const res = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+            {
+                headers: {
+                    //@ts-expect-error abc
+                    'Authorization': `Bearer ${session.accessToken}`,
+                    'Accept': 'application/vnd.github+json',
+                  
+                }
             }
-        });
+        );
 
         if (!res.ok) {
-            throw new Error(`GitHub API responded with status ${res.status}`);
+            console.error(`GitHub API error: ${res.statusText}`);
+            return NextResponse.json(
+                { success: false, error: `GitHub API responded with status ${res.status}` },
+                { status: res.status }
+            );
         }
 
         const data: GithubTree = await res.json();
+        
+        const file_names = data.tree
+            .filter(file => file.type === 'blob' && file.path)
+            .map(file => ({
+                name: file.path,
+                url: file.url
+            }));
 
-        for (const file of data.tree) {
-            if (file.type === 'blob' && file.path) {
-                file_names.push({
-                    name: file.path,
-                    url: file.url
-                });
-            }
-        }
+            const filteredFiles = file_names.filter(file => {
+                // Split the path into segments
+                const pathSegments = file.name.split('/');
+                
+                // Check if any segment is in excludedFolders
+                const hasExcludedFolder = pathSegments.some(segment => 
+                    excludedFolders.has(segment)
+                );
+                if (hasExcludedFolder) return false;
+    
+                // Check if the file extension or name is in excludedFiles
+                const fileName = pathSegments[pathSegments.length - 1];
+                const hasExcludedExtension = Array.from(excludedFiles).some(ext => 
+                    fileName.toLowerCase().endsWith(ext.toLowerCase())
+                );
+                
+                return !hasExcludedExtension;
+            });
+    
+        console.log(filteredFiles);
 
-        const filteredFiles = file_names.filter((file) => 
-            !excludedFiles.some((excludedFile) => file.name.includes(excludedFile)) && !excludedFolders.some((excludedFolder)=> file.name.includes(excludedFolder))
-        );
-
-        // Generate embeddings for the filtered files
-        await Promise.all(filteredFiles.map(async (file) => {
-            await fetch('/api/embeddings', {
-                method:'POST',
+        await Promise.all(filteredFiles.map(file => 
+            fetch('http://localhost:3000/api/embeddings', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ fileName: file.name,url: file.url})
+                body: JSON.stringify({ 
+                    fileName: file.name,
+                    url: file.url
+                })
             })
-        }))
-        .then((res)=>{
-            console.log(res);
-        })
-        .catch((err)=>{
-            console.error(err);
+        ));
+        return NextResponse.json({ 
+            success: true, 
+            data: filteredFiles,
+            message: 'Files filtered successfully'
         });
 
-        return NextResponse.json({ success: true, data: filteredFiles,message:'Embeddings generated for the files as context and fully too.' });
     } catch (error) {
         console.error('Error fetching repository data:', error);
         return NextResponse.json(

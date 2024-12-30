@@ -10,17 +10,18 @@ datasource db {
 }
 
 model Embedding {
-  id             String    @id @default(cuid()) // Unique identifier for the file
-  fileName       String    // Name of the file, e.g., "auth.js"
-  rawContent     String    // Full content of the file
-  type          EmbeddingType?  // Type of the file, e.g., "javascript"
-  embedding Unsupported("vector(768)")? 
-  url           String    // URL to the file
-  summary        String    // High-level summary of the file
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-}
+  id          String    @id @default(cuid())
+  fileName    String    
+  rawContent  String    
+  type        EmbeddingType?
+  embedding   Unsupported("vector(768)")?
+  url         String    
+  summary     String    
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?  @updatedAt
 
+  @@map("embedding") // Explicitly map to table name
+}
 
 
 enum EmbeddingType {

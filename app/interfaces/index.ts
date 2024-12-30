@@ -11,6 +11,7 @@ export interface Repository {
       login:string
     },
     description: string;
+    default_branch:string
   }
 
 export interface TypewriterProps {

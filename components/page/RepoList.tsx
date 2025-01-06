@@ -59,10 +59,10 @@ const RepoList: React.FC = () => {
           {repos.map((repo, index) => (
             <Card
               key={index}
-              className="group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-xl overflow-hidden"
+              className="bg-inherit shadow-lg"
               onClick={() => handleRedirect(repo.name,repo.owner.login,repo.default_branch)}
             >
-              <CardHeader className="p-4 bg-gradient-to-r from-gray-800/80 to-gray-700/80 border-b border-gray-700/50">
+              <CardHeader className="p-4 ">
                 <CardTitle className="flex items-center space-x-2">
                   <a
                     href={repo.html_url}

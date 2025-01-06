@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
-import { system_prompt } from '../../prompts/review-prompt'
+import { system_prompt } from '../prompts/review-prompt'
 import { db } from '@/lib/db'
-import { getEmbeddings } from '../../embeddings/route'
+import { getEmbeddings } from '../embeddings/route'
+
 
 export async function POST(request: Request) {
   try {
+   
     const { user_prompt } = await request.json()
     
     const CLOUDFLARE_ACCOUNT_ID = process.env.ACCOUNT_ID
@@ -64,12 +66,12 @@ export async function POST(request: Request) {
             ],
             stream: true
           }),
-          signal: controller.signal
+          
         }
       )
 
       clearTimeout(timeout)
-
+      //Need a custom response 
       if (!response.ok) {
         const errorBody = await response.text()
         console.error('Cloudflare API error:', {
@@ -148,7 +150,7 @@ export async function POST(request: Request) {
         if (jsonStr === '[DONE]') {
           return
         }
-        
+          
         try {
           const json = JSON.parse(jsonStr)
           if (json.response) {
@@ -171,6 +173,7 @@ export async function POST(request: Request) {
       })
 
     } catch (error) {
+      //@ts-expect-error abc
       if (error.name === 'AbortError') {
         return NextResponse.json(
           { error: 'Request timed out' },
@@ -181,8 +184,10 @@ export async function POST(request: Request) {
     }
 
   } catch (error) {
+  
     console.error('Error in chat API:', error)
     return NextResponse.json(
+      //@ts-expect-error abc
       { error: 'Failed to process chat message', details: error.message },
       { status: 500 }
     )

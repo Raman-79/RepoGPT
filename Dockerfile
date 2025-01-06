@@ -1,26 +1,16 @@
-    # Start from the official PostgreSQL base image
-    FROM postgres:17
+FROM postgres:latest
 
-    # Install necessary dependencies for building extensions
-    RUN apt-get update && apt-get install -y \
-        build-essential \
-        git \
-        postgresql-server-dev-17 && \
-        rm -rf /var/lib/apt/lists/*
 
-    # Clone, build, and install the pgvector extension
-    RUN git clone https://github.com/pgvector/pgvector.git /tmp/pgvector && \
-        cd /tmp/pgvector && \
-        make && make install && \
-        rm -rf /tmp/pgvector
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    postgresql-server-dev-all \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-    # Set default environment variables
-    ENV POSTGRES_USER=postgres
-    ENV POSTGRES_PASSWORD=randompassword
-    ENV POSTGRES_DB=mydb
+RUN git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+    && cd /tmp/pgvector \
+    && make \
+    && make install
 
-    # Expose the default PostgreSQL port
-    EXPOSE 5432
-
-    # Start the PostgreSQL server
-    CMD ["postgres"]
+# Clean up
+RUN rm -rf /tmp/pgvector

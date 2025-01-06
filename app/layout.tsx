@@ -26,7 +26,7 @@ export default function RootLayout({
     <html lang="en">
       <SessionProviderAuth>
       <body 
-        className={`${geistSans.variable} ${geistMono.variable}  bg-gradient-to-b from-gray-900 via-gray-800 to-black`}
+        className={`${geistSans.variable} ${geistMono.variable} dark `}
       >
         {children}
       </body>

@@ -9,6 +9,8 @@ datasource db {
   extensions = [vector]
 }
 
+
+
 model Embedding {
   id          String    @id @default(cuid())
   fileName    String    

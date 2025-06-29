@@ -1,28 +1,29 @@
-import { NextResponse } from 'next/server'
-import { system_prompt } from '../prompts/review-prompt'
-import { db } from '@/lib/db'
-import { getEmbeddings } from '../embeddings/route'
-
+import { NextResponse } from 'next/server';
+import { system_prompt } from '../prompts/review-prompt';
+import { db } from '@/lib/db';
+import { getEmbeddings } from '../embeddings/route';
+import { handleApiError, ExternalServiceError } from '@/lib/errors';
+import { validateInput, chatMessageSchema } from '@/lib/validation';
 
 export async function POST(request: Request) {
   try {
-   
-    const { user_prompt } = await request.json()
+    const body = await request.json();
+    const { user_prompt } = validateInput(chatMessageSchema, body);
     
-    const CLOUDFLARE_ACCOUNT_ID = process.env.ACCOUNT_ID
-    const CLOUDFLARE_API_TOKEN = process.env.WORKERS_AI
+    const CLOUDFLARE_ACCOUNT_ID = process.env.ACCOUNT_ID;
+    const CLOUDFLARE_API_TOKEN = process.env.WORKERS_AI;
     
     if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_API_TOKEN) {
-      throw new Error('Missing required environment variables')
+      throw new Error('Missing required environment variables: ACCOUNT_ID or WORKERS_AI');
     }
 
     // Generate embedding for user prompt
-    const embeddings = await getEmbeddings(user_prompt)
-    const queryVector = `[${embeddings.join(',')}]`
+    const embeddings = await getEmbeddings(user_prompt);
+    const queryVector = `[${embeddings.join(',')}]`;
     
-    let user_prompt_res_embedding
+    let contextDocuments;
     try {
-      user_prompt_res_embedding = await db.$queryRaw`
+      contextDocuments = await db.$queryRaw`
         SELECT "fileName", "rawContent", "summary"
         FROM (
           SELECT "fileName", "rawContent", "summary",
@@ -33,22 +34,18 @@ export async function POST(request: Request) {
         WHERE similarity > 0.5
         ORDER BY similarity DESC
         LIMIT 10
-      ` as { fileName: string; rawContent: string; summary: string }[]
+      ` as { fileName: string; rawContent: string; summary: string }[];
     } catch (dbError) {
-      console.error('Database query failed:', dbError)
-      return NextResponse.json(
-        { error: 'Failed to retrieve context from database' },
-        { status: 500 }
-      )
+      console.error('Database query failed:', dbError);
+      throw new ExternalServiceError('Database', 'Failed to retrieve context');
     }
 
-    let context = ''
-    for (const doc of user_prompt_res_embedding) {
-      context += `source ${doc.fileName}\ncode content:${doc.rawContent}\n summary of file: ${doc.summary} `
-    }
+    const context = contextDocuments
+      .map(doc => `source ${doc.fileName}\ncode content:${doc.rawContent}\nsummary of file: ${doc.summary}`)
+      .join('\n\n');
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30000)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     try {
       const response = await fetch(
@@ -62,104 +59,81 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             messages: [
               { role: "system", content: system_prompt(context) },
-              { role: "user", content: JSON.stringify(user_prompt) }
+              { role: "user", content: user_prompt }
             ],
             stream: true
           }),
-          
+          signal: controller.signal
         }
-      )
+      );
 
-      clearTimeout(timeout)
-      //Need a custom response 
+      clearTimeout(timeout);
+
       if (!response.ok) {
-        const errorBody = await response.text()
+        const errorBody = await response.text();
         console.error('Cloudflare API error:', {
           status: response.status,
           statusText: response.statusText,
           body: errorBody
-        })
+        });
         
-        if (response.status === 404) {
-          return NextResponse.json(
-            { error: 'Cloudflare Workers AI endpoint not found. Please verify the API endpoint.' },
-            { status: 404 }
-          )
-        }
-        
-        if (response.status === 401) {
-          return NextResponse.json(
-            { error: 'Authentication failed. Please check your Cloudflare API credentials.' },
-            { status: 401 }
-          )
-        }
-
-        throw new Error(`Cloudflare API returned ${response.status}: ${response.statusText}`)
+        throw new ExternalServiceError('Cloudflare AI', `API returned ${response.status}: ${response.statusText}`);
       }
 
       if (!response.body) {
-        throw new Error('Response body is null')
+        throw new Error('Response body is null');
       }
 
-      const stream = new TransformStream()
-      const writer = stream.writable.getWriter()
-      const encoder = new TextEncoder()
-      const decoder = new TextDecoder()
+      const stream = new TransformStream();
+      const writer = stream.writable.getWriter();
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
 
-      const reader = response.body.getReader()
+      const reader = response.body.getReader();
+      let buffer = '';
       
-      let buffer = ''
-      
-      ;(async () => {
+      (async () => {
         try {
           while (true) {
-            const { done, value } = await reader.read()
+            const { done, value } = await reader.read();
             if (done) {
               if (buffer.trim()) {
-                processChunk(buffer.trim())
+                await processChunk(buffer.trim());
               }
-              await writer.close()
-              break
+              await writer.close();
+              break;
             }
 
-            buffer += decoder.decode(value, { stream: true })
+            buffer += decoder.decode(value, { stream: true });
             
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
             
             for (const line of lines) {
-              await processChunk(line.trim())
+              await processChunk(line.trim());
             }
           }
         } catch (error) {
-          console.error('Error processing stream:', error)
-          await writer.abort(error)
+          console.error('Error processing stream:', error);
+          await writer.abort(error);
         }
-      })()
+      })();
 
-      // Helper function to process each chunk
       async function processChunk(chunk: string) {
-        if (!chunk) return
+        if (!chunk) return;
         
-        // Remove "data: " prefix if it exists
-        const jsonStr = chunk.startsWith('data: ') 
-          ? chunk.slice(6)
-          : chunk
+        const jsonStr = chunk.startsWith('data: ') ? chunk.slice(6) : chunk;
         
-        // Handle stream termination message
-        if (jsonStr === '[DONE]') {
-          return
-        }
+        if (jsonStr === '[DONE]') return;
           
         try {
-          const json = JSON.parse(jsonStr)
+          const json = JSON.parse(jsonStr);
           if (json.response) {
-            await writer.write(encoder.encode(json.response))
+            await writer.write(encoder.encode(json.response));
           }
         } catch (e) {
-          // Only log parsing errors for non-[DONE] messages
           if (jsonStr !== '[DONE]') {
-            console.error('Error parsing chunk:', e, 'Chunk:', jsonStr)
+            console.error('Error parsing chunk:', e, 'Chunk:', jsonStr);
           }
         }
       }
@@ -170,26 +144,25 @@ export async function POST(request: Request) {
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
         },
-      })
+      });
 
     } catch (error) {
-      //@ts-expect-error abc
-      if (error.name === 'AbortError') {
+      clearTimeout(timeout);
+      if (error instanceof Error && error.name === 'AbortError') {
         return NextResponse.json(
           { error: 'Request timed out' },
           { status: 504 }
-        )
+        );
       }
-      throw error
+      throw error;
     }
 
   } catch (error) {
-  
-    console.error('Error in chat API:', error)
+    console.error('Error in chat API:', error);
+    const { message, statusCode } = handleApiError(error);
     return NextResponse.json(
-      //@ts-expect-error abc
-      { error: 'Failed to process chat message', details: error.message },
-      { status: 500 }
-    )
+      { error: message },
+      { status: statusCode }
+    );
   }
 }

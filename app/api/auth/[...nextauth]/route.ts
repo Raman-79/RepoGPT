@@ -1,6 +1,14 @@
 import { NEXT_AUTH } from "@/lib/auth"
 import NextAuth from "next-auth"
 
-const handler = NextAuth(NEXT_AUTH);
+const GET = async (req: Request) => {
+  const handler = NextAuth(NEXT_AUTH);
+  return handler(req);
+}
 
-export { handler as GET, handler as POST }
+const POST = async (req: Request) => {
+  const handler = NextAuth(NEXT_AUTH);
+  return handler(req);
+}
+
+export { GET, POST }
